@@ -63,54 +63,18 @@ def recognize_and_save_piece(square_image, model, piece_labels, index):
     
     Returns:
     - piece_label (str): The label of the recognized piece.
-    - piece_color (str): The color of the piece ('white' or 'black').
     """
     img = cv2.resize(square_image, (224, 224))
     img = img.astype('float32') / 255.0
     img = np.expand_dims(img, axis=0)
     predictions = model.predict(img)
     predicted_class = np.argmax(predictions, axis=1)[0]
-    piece_label = piece_labels.get(str(predicted_class), 'Unknown')
+    piece_label = piece_labels.get(str(predicted_class), 'empty')
     
-    # Detect color of the piece
-    piece_color = detect_piece_color(square_image)
+    # Save the square image with the piece label as the filename
+    save_image(square_image, f'predicted_piece_{index}_{piece_label}.png')
     
-    # Save the square image with the piece label and color as the filename
-    save_image(square_image, f'predicted_piece_{index}_{piece_label}_{piece_color}.png')
-    
-    return piece_label, piece_color
-
-# Detect piece color based on the center pixel and surrounding area of the square
-def detect_piece_color(square_image):
-    """
-    Detect the color of the chess piece based on the color of the center pixel and surrounding area.
-    Args:
-    - square_image (ndarray): Image of a single chess square.
-    
-    Returns:
-    - color (str): Color of the piece ('white' or 'black').
-    """
-    center_x = square_image.shape[1] // 2
-    center_y = square_image.shape[0] // 2
-    center_pixel = square_image[center_y, center_x]
-    
-    # Convert the center pixel to grayscale
-    gray_value = np.dot(center_pixel, [0.2989, 0.5870, 0.1140])
-    
-    # Optional: Check surrounding pixels for color consistency
-    radius_y = 4  # Radius to check around the center
-    radius_x = 2
-    y_min = max(center_y - radius_y, 0)
-    y_max = min(center_y + radius_y, square_image.shape[0])
-    x_min = max(center_x - radius_x, 0)
-    x_max = min(center_x + radius_x, square_image.shape[1])
-    
-    surrounding_pixels = square_image[y_min:y_max, x_min:x_max]
-    avg_gray_value = np.mean(np.dot(surrounding_pixels, [0.2989, 0.5870, 0.1140]))
-    
-    # Threshold to distinguish between black and white
-    threshold = 128
-    return 'white' if avg_gray_value > threshold else 'black'
+    return piece_label
 
 # Convert board state to FEN
 def board_state_to_fen(board_state):
@@ -195,9 +159,9 @@ def main(image_path, engine_path):
         board_state = []  # List to store the recognized piece labels
         for index, square in enumerate(squares):
             # Recognize the piece in each square and save the image
-            predicted_piece, piece_color = recognize_and_save_piece(square, model, piece_labels, index)
-            # Append the recognized piece to the board state with color information
-            board_state.append(predicted_piece if piece_color == 'white' else 'b' + predicted_piece[1:])
+            predicted_piece = recognize_and_save_piece(square, model, piece_labels, index)
+            # Append the recognized piece to the board state
+            board_state.append(predicted_piece)
         
         # Convert the board state to FEN notation
         board_fen = board_state_to_fen(board_state)
