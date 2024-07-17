@@ -41,6 +41,50 @@ def segment_board(image):
             squares.append(square)
     return squares
 
+# Draw a highlight on the chessboard image
+def highlight_move(image, move, square_size):
+    """
+    Highlight the source and destination squares of a move on the chessboard image.
+    Args:
+    - image (ndarray): The original image of the chessboard.
+    - move (chess.Move): The move to highlight.
+    - square_size (int): Size of each square on the chessboard.
+    
+    Returns:
+    - image_with_highlight (ndarray): The image with highlighted move.
+    """
+    # Create a copy of the image to draw on
+    image_with_highlight = image.copy()
+    
+    # Calculate source and destination coordinates
+    from_square = move.from_square
+    to_square = move.to_square
+    
+    # Convert square number to row and column (inverted row index for correct Y-axis)
+    from_row, from_col = divmod(from_square, 8)
+    from_row = 7 - from_row  # Invert row index to correct Y-axis mirroring
+    to_row, to_col = divmod(to_square, 8)
+    to_row = 7 - to_row  # Invert row index to correct Y-axis mirroring
+    
+    # Define colors for highlighting
+    highlight_color = (0, 255, 0)  # Green color for highlight
+    thickness = 2  # Line thickness
+    
+    # Draw rectangles around the source and destination squares
+    start_x = from_col * square_size
+    start_y = from_row * square_size
+    end_x = start_x + square_size
+    end_y = start_y + square_size
+    cv2.rectangle(image_with_highlight, (start_x, start_y), (end_x, end_y), highlight_color, thickness)
+    
+    start_x = to_col * square_size
+    start_y = to_row * square_size
+    end_x = start_x + square_size
+    end_y = start_y + square_size
+    cv2.rectangle(image_with_highlight, (start_x, start_y), (end_x, end_y), highlight_color, thickness)
+    
+    return image_with_highlight
+
 # Save image with a specific filename
 def save_image(image, filename):
     """
@@ -70,9 +114,6 @@ def recognize_and_save_piece(square_image, model, piece_labels, index):
     predictions = model.predict(img)
     predicted_class = np.argmax(predictions, axis=1)[0]
     piece_label = piece_labels.get(str(predicted_class), 'empty')
-    
-    # Save the square image with the piece label as the filename
-    save_image(square_image, f'predicted_piece_{index}_{piece_label}.png')
     
     return piece_label
 
@@ -187,12 +228,20 @@ def main(image_path, engine_path, is_white_turn):
         best_move = suggest_best_move(board_fen, engine_path)
         print("Suggested Best Move:", best_move)  # Print the best move
 
+        # Highlight the best move on the chessboard image
+        square_size = original_image.shape[0] // 8
+        image_with_highlight = highlight_move(original_image, best_move, square_size)
+        
+        # Save the image with highlighted move
+        highlighted_image_path = 'highlighted_move.png'
+        save_image(image_with_highlight, highlighted_image_path)
+        print(f"Highlighted image saved as {highlighted_image_path}")
+
     except Exception as e:
         print(f"An error occurred: {e}")  # Print any error messages
 
 # Run the main function
-#image_path = r'chessboards\chesscom_board2.png'  # Path to the chessboard image
-image_path = r'chessboards\random_black_turn.png' 
+image_path = r'chessboards\chesscom_board2.png' 
 engine_path = r'C:\Users\USER\workspace\python\personal_projects\AI_Chess_cheater\stockfish\stockfish-windows-x86-64-sse41-popcnt.exe'  # Path to Stockfish engine
 is_white_turn = False  # Example value; adjust as needed
 main(image_path, engine_path, is_white_turn)  # Execute the main function
