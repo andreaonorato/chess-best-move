@@ -76,12 +76,13 @@ def recognize_and_save_piece(square_image, model, piece_labels, index):
     
     return piece_label
 
-# Convert board state to FEN
-def board_state_to_fen(board_state):
+def board_state_to_fen(board_state, custom_to_fen_map, is_white_turn):
     """
-    Convert the board state to Forsyth-Edwards Notation (FEN).
+    Convert the board state to Forsyth-Edwards Notation (FEN) with turn information.
     Args:
     - board_state (list): List of piece labels representing the board state.
+    - custom_to_fen_map (dict): Dictionary mapping custom piece labels to FEN notation.
+    - is_white_turn (bool): Boolean indicating if it is White's turn.
     
     Returns:
     - fen (str): The FEN string representing the board state.
@@ -98,11 +99,19 @@ def board_state_to_fen(board_state):
                 if empty_count > 0:
                     fen_row += str(empty_count)
                     empty_count = 0
-                fen_row += piece
+                fen_row += custom_to_fen_map[piece]
         if empty_count > 0:
             fen_row += str(empty_count)
         fen_rows.append(fen_row)
-    return '/'.join(fen_rows)
+    
+    # Construct the FEN string
+    fen = '/'.join(fen_rows)
+    # Append turn information: 'w' for White's turn, 'b' for Black's turn
+    fen += ' ' + ('w' if is_white_turn else 'b')
+    # Append castling rights and en passant target, placeholders for now
+    fen += ' KQkq - 0 1'  # Castling rights and en passant target
+
+    return fen
 
 # Suggest best move using Stockfish
 def suggest_best_move(fen, engine_path):
@@ -142,12 +151,13 @@ piece_labels = {
 }
 
 # Main function
-def main(image_path, engine_path):
+def main(image_path, engine_path, is_white_turn):
     """
     Main function to run the piece recognition and move suggestion.
     Args:
     - image_path (str): Path to the chessboard image file.
     - engine_path (str): Path to the Stockfish executable.
+    - is_white_turn (bool): Boolean indicating if it is White's turn.
     """
     try:
         # Preprocess the image to get original image
@@ -163,8 +173,14 @@ def main(image_path, engine_path):
             # Append the recognized piece to the board state
             board_state.append(predicted_piece)
         
+        custom_to_fen_map = {
+            'bb': 'b', 'bk': 'k', 'bn': 'n', 'bp': 'p', 'bq': 'q', 'br': 'r',
+            'wb': 'B', 'wk': 'K', 'wn': 'N', 'wp': 'P', 'wq': 'Q', 'wr': 'R',
+            'empty': '1'  # We will handle 'empty' separately
+        }
+
         # Convert the board state to FEN notation
-        board_fen = board_state_to_fen(board_state)
+        board_fen = board_state_to_fen(board_state, custom_to_fen_map, is_white_turn)
         print("Recognized FEN:", board_fen)  # Print the FEN string
         
         # Suggest the best move based on the FEN notation
@@ -175,6 +191,8 @@ def main(image_path, engine_path):
         print(f"An error occurred: {e}")  # Print any error messages
 
 # Run the main function
-image_path = "chesscom_board2.png"  # Path to the chessboard image
+#image_path = r'chessboards\chesscom_board2.png'  # Path to the chessboard image
+image_path = r'chessboards\random_black_turn.png' 
 engine_path = r'C:\Users\USER\workspace\python\personal_projects\AI_Chess_cheater\stockfish\stockfish-windows-x86-64-sse41-popcnt.exe'  # Path to Stockfish engine
-main(image_path, engine_path)  # Execute the main function
+is_white_turn = False  # Example value; adjust as needed
+main(image_path, engine_path, is_white_turn)  # Execute the main function
