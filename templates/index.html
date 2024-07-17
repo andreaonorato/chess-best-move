@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Best Move</title>
+    <style>
+        body {
+            background-color: #e0e5ec;
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        h1 {
+            color: #333;
+            font-size: 2em;
+            margin-bottom: 1em;
+        }
+        form {
+            background: #e0e5ec;
+            box-shadow: 9px 9px 16px #a3b1c6, -9px -9px 16px #ffffff;
+            border-radius: 10px;
+            padding: 2em;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        input[type="file"], select, button {
+            margin: 1em 0;
+            padding: 1em;
+            border: none;
+            border-radius: 5px;
+            font-size: 1em;
+            box-shadow: inset 2px 2px 5px #a3b1c6, inset -5px -5px 10px #ffffff;
+        }
+        button {
+            background-color: #6c63ff;
+            color: white;
+            cursor: pointer;
+            box-shadow: 3px 3px 6px #a3b1c6, -3px -3px 6px #ffffff;
+        }
+        button:hover {
+            background-color: #5848c2;
+        }
+        #loading {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 16px solid #f3f3f3;
+            border-top: 16px solid #6c63ff;
+            border-radius: 50%;
+            width: 120px;
+            height: 120px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Upload a Chessboard Image</h1>
+    <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept="image/*" required>
+        <label for="turn">Select Turn:</label>
+        <select name="turn" id="turn">
+            <option value="white">White</option>
+            <option value="black">Black</option>
+        </select>
+        <button type="submit">Find best move</button>
+    </form>
+    <div id="loading"></div>
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', function() {
+            document.getElementById('loading').style.display = 'block';
+        });
+    </script>
+</body>
+</html>

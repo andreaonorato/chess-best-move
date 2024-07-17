@@ -1,20 +1,16 @@
+from flask import Flask, request, render_template, send_file, send_from_directory, redirect, url_for
 import cv2
 import numpy as np
 from tensorflow.keras.models import load_model
 import chess
 import chess.engine
 import os
+import io
+
+app = Flask(__name__)
 
 # Preprocess image
 def preprocess_image(image_path):
-    """
-    Load an image from file and preprocess it for further processing.
-    Args:
-    - image_path (str): Path to the image file.
-    
-    Returns:
-    - image (ndarray): The original image in color.
-    """
     image = cv2.imread(image_path)
     if image is None:
         raise ValueError(f"Image not found or unable to read: {image_path}")
@@ -22,14 +18,6 @@ def preprocess_image(image_path):
 
 # Segment board into squares
 def segment_board(image):
-    """
-    Segment the chessboard image into 64 squares.
-    Args:
-    - image (ndarray): The original image.
-    
-    Returns:
-    - squares (list): List of 64 segmented square images.
-    """
     board_size = image.shape[0]
     square_size = board_size // 8
     squares = []
@@ -43,91 +31,42 @@ def segment_board(image):
 
 # Draw a highlight on the chessboard image
 def highlight_move(image, move, square_size):
-    """
-    Highlight the source and destination squares of a move on the chessboard image.
-    Args:
-    - image (ndarray): The original image of the chessboard.
-    - move (chess.Move): The move to highlight.
-    - square_size (int): Size of each square on the chessboard.
-    
-    Returns:
-    - image_with_highlight (ndarray): The image with highlighted move.
-    """
-    # Create a copy of the image to draw on
     image_with_highlight = image.copy()
-    
-    # Calculate source and destination coordinates
     from_square = move.from_square
     to_square = move.to_square
-    
-    # Convert square number to row and column (inverted row index for correct Y-axis)
     from_row, from_col = divmod(from_square, 8)
-    from_row = 7 - from_row  # Invert row index to correct Y-axis mirroring
+    from_row = 7 - from_row
     to_row, to_col = divmod(to_square, 8)
-    to_row = 7 - to_row  # Invert row index to correct Y-axis mirroring
-    
-    # Define colors for highlighting
-    highlight_color = (0, 255, 0)  # Green color for highlight
-    thickness = 2  # Line thickness
-    
-    # Draw rectangles around the source and destination squares
+    to_row = 7 - to_row
+    highlight_color = (0, 255, 0)
+    thickness = 2
     start_x = from_col * square_size
     start_y = from_row * square_size
     end_x = start_x + square_size
     end_y = start_y + square_size
     cv2.rectangle(image_with_highlight, (start_x, start_y), (end_x, end_y), highlight_color, thickness)
-    
     start_x = to_col * square_size
     start_y = to_row * square_size
     end_x = start_x + square_size
     end_y = start_y + square_size
     cv2.rectangle(image_with_highlight, (start_x, start_y), (end_x, end_y), highlight_color, thickness)
-    
     return image_with_highlight
 
 # Save image with a specific filename
 def save_image(image, filename):
-    """
-    Save an image to disk with a given filename.
-    Args:
-    - image (ndarray): The image to save.
-    - filename (str): The filename to save the image as.
-    """
     cv2.imwrite(filename, image)
 
-# Recognize piece in each square and save image
+# Recognize piece in each square
 def recognize_and_save_piece(square_image, model, piece_labels, index):
-    """
-    Recognize the chess piece in a given square image and save the image with a filename corresponding to the piece label.
-    Args:
-    - square_image (ndarray): Image of a single chess square.
-    - model (keras.Model): The trained model for piece recognition.
-    - piece_labels (dict): Dictionary mapping class indices to piece labels.
-    - index (int): Index of the square for naming.
-    
-    Returns:
-    - piece_label (str): The label of the recognized piece.
-    """
     img = cv2.resize(square_image, (224, 224))
     img = img.astype('float32') / 255.0
     img = np.expand_dims(img, axis=0)
     predictions = model.predict(img)
     predicted_class = np.argmax(predictions, axis=1)[0]
     piece_label = piece_labels.get(str(predicted_class), 'empty')
-    
     return piece_label
 
 def board_state_to_fen(board_state, custom_to_fen_map, is_white_turn):
-    """
-    Convert the board state to Forsyth-Edwards Notation (FEN) with turn information.
-    Args:
-    - board_state (list): List of piece labels representing the board state.
-    - custom_to_fen_map (dict): Dictionary mapping custom piece labels to FEN notation.
-    - is_white_turn (bool): Boolean indicating if it is White's turn.
-    
-    Returns:
-    - fen (str): The FEN string representing the board state.
-    """
     fen_rows = []
     for i in range(0, 64, 8):
         row = board_state[i:i+8]
@@ -144,27 +83,12 @@ def board_state_to_fen(board_state, custom_to_fen_map, is_white_turn):
         if empty_count > 0:
             fen_row += str(empty_count)
         fen_rows.append(fen_row)
-    
-    # Construct the FEN string
     fen = '/'.join(fen_rows)
-    # Append turn information: 'w' for White's turn, 'b' for Black's turn
     fen += ' ' + ('w' if is_white_turn else 'b')
-    # Append castling rights and en passant target, placeholders for now
-    fen += ' KQkq - 0 1'  # Castling rights and en passant target
-
+    fen += ' KQkq - 0 1'
     return fen
 
-# Suggest best move using Stockfish
 def suggest_best_move(fen, engine_path):
-    """
-    Suggest the best move using the Stockfish chess engine.
-    Args:
-    - fen (str): The FEN string representing the board state.
-    - engine_path (str): Path to the Stockfish executable.
-    
-    Returns:
-    - best_move (chess.Move): The best move suggested by Stockfish.
-    """
     board = chess.Board(fen)
     engine = chess.engine.SimpleEngine.popen_uci(engine_path)
     result = engine.play(board, chess.engine.Limit(time=0.1))
@@ -176,72 +100,48 @@ model = load_model('chess_piece_recognizer.h5')
 
 # Define your class labels (make sure this matches the labels used in training)
 piece_labels = {
-    '0': 'bb',       # Black bishop
-    '1': 'bk',       # Black king
-    '2': 'bn',       # Black knight
-    '3': 'bp',       # Black pawn
-    '4': 'bq',       # Black queen
-    '5': 'br',       # Black rook
-    '6': 'empty',    # Empty square
-    '7': 'wb',       # White bishop
-    '8': 'wk',       # White king
-    '9': 'wn',       # White knight
-    '10': 'wp',      # White pawn
-    '11': 'wq',      # White queen
-    '12': 'wr'       # White rook
+    '0': 'bb', '1': 'bk', '2': 'bn', '3': 'bp', '4': 'bq', '5': 'br',
+    '6': 'empty', '7': 'wb', '8': 'wk', '9': 'wn', '10': 'wp', '11': 'wq', '12': 'wr'
 }
 
-# Main function
-def main(image_path, engine_path, is_white_turn):
-    """
-    Main function to run the piece recognition and move suggestion.
-    Args:
-    - image_path (str): Path to the chessboard image file.
-    - engine_path (str): Path to the Stockfish executable.
-    - is_white_turn (bool): Boolean indicating if it is White's turn.
-    """
-    try:
-        # Preprocess the image to get original image
-        original_image = preprocess_image(image_path)
-        
-        # Segment the board into 64 squares
-        squares = segment_board(original_image)
-        
-        board_state = []  # List to store the recognized piece labels
-        for index, square in enumerate(squares):
-            # Recognize the piece in each square and save the image
-            predicted_piece = recognize_and_save_piece(square, model, piece_labels, index)
-            # Append the recognized piece to the board state
-            board_state.append(predicted_piece)
-        
-        custom_to_fen_map = {
-            'bb': 'b', 'bk': 'k', 'bn': 'n', 'bp': 'p', 'bq': 'q', 'br': 'r',
-            'wb': 'B', 'wk': 'K', 'wn': 'N', 'wp': 'P', 'wq': 'Q', 'wr': 'R',
-            'empty': '1'  # We will handle 'empty' separately
-        }
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-        # Convert the board state to FEN notation
-        board_fen = board_state_to_fen(board_state, custom_to_fen_map, is_white_turn)
-        print("Recognized FEN:", board_fen)  # Print the FEN string
-        
-        # Suggest the best move based on the FEN notation
-        best_move = suggest_best_move(board_fen, engine_path)
-        print("Suggested Best Move:", best_move)  # Print the best move
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if request.method == 'POST':
+        file = request.files['file']
+        turn = request.form.get('turn', 'white')
+        is_white_turn = (turn == 'white')
+        if file:
+            image_path = 'uploaded_image.png'
+            file.save(image_path)
+            original_image = preprocess_image(image_path)
+            squares = segment_board(original_image)
+            board_state = []
+            for index, square in enumerate(squares):
+                predicted_piece = recognize_and_save_piece(square, model, piece_labels, index)
+                board_state.append(predicted_piece)
+            custom_to_fen_map = {
+                'bb': 'b', 'bk': 'k', 'bn': 'n', 'bp': 'p', 'bq': 'q', 'br': 'r',
+                'wb': 'B', 'wk': 'K', 'wn': 'N', 'wp': 'P', 'wq': 'Q', 'wr': 'R', 'empty': '1'
+            }
+            board_fen = board_state_to_fen(board_state, custom_to_fen_map, is_white_turn=is_white_turn)
+            best_move = suggest_best_move(board_fen, 'stockfish/stockfish-windows-x86-64-sse41-popcnt.exe')
+            square_size = original_image.shape[0] // 8
+            image_with_highlight = highlight_move(original_image, best_move, square_size)
+            result_image_path = 'highlighted_move.png'
+            save_image(image_with_highlight, result_image_path)
+            return redirect(url_for('display_image', filename=result_image_path))
 
-        # Highlight the best move on the chessboard image
-        square_size = original_image.shape[0] // 8
-        image_with_highlight = highlight_move(original_image, best_move, square_size)
-        
-        # Save the image with highlighted move
-        highlighted_image_path = 'highlighted_move.png'
-        save_image(image_with_highlight, highlighted_image_path)
-        print(f"Highlighted image saved as {highlighted_image_path}")
+@app.route('/image/<filename>')
+def display_image(filename):
+    return render_template('display_image.html', image_url=url_for('serve_image', filename=filename))
 
-    except Exception as e:
-        print(f"An error occurred: {e}")  # Print any error messages
+@app.route('/serve_image/<filename>')
+def serve_image(filename):
+    return send_file(filename, mimetype='image/png')
 
-# Run the main function
-image_path = r'chessboards\chesscom_board2.png' 
-engine_path = r'C:\Users\USER\workspace\python\personal_projects\AI_Chess_cheater\stockfish\stockfish-windows-x86-64-sse41-popcnt.exe'  # Path to Stockfish engine
-is_white_turn = False  # Example value; adjust as needed
-main(image_path, engine_path, is_white_turn)  # Execute the main function
+if __name__ == '__main__':
+    app.run(debug=True)
